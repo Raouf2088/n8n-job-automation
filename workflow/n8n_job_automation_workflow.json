@@ -1,0 +1,351 @@
+{
+  "name": "Job Search Automation Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "trigger",
+      "name": "Run Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Adzuna doesn't handle long OR queries well, so we run multiple searches\nconst queries = [\n  'machine learning',\n  'computer vision',\n  'deep learning',\n  'software engineer',\n  '3D engineer',\n  'rendering engineer',\n  'python developer'\n];\n\nconst appId = $env.ADZUNA_APP_ID;\nconst appKey = $env.ADZUNA_KEY;\nconst allResults = [];\n\nfor (const q of queries) {\n  try {\n    const url = `https://api.adzuna.com/v1/api/jobs/fr/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodeURIComponent(q)}&where=France&max_days_old=7&content-type=application/json`;\n    const response = await this.helpers.httpRequest({ method: 'GET', url, json: true });\n    if (response.results) {\n      allResults.push(...response.results);\n    }\n  } catch(e) {\n    // Skip failed queries\n  }\n}\n\nreturn [{ json: { results: allResults, count: allResults.length, __CLASS__: 'Adzuna::API::Response::JobSearchResults' } }];"
+      },
+      "id": "adzuna",
+      "name": "Adzuna Job Search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        250,
+        100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// SerpAPI Google Jobs requires hl=fr&gl=fr for French results\n// Run multiple queries to maximize coverage (free tier: 100 searches/month)\nconst queries = [\n  'computer vision engineer',\n  'machine learning engineer',\n  'software engineer python',\n  'ingenieur deep learning'\n];\n\nconst apiKey = $env.SERPAPI_KEY;\nconst allJobs = [];\n\nfor (const q of queries) {\n  try {\n    const url = `https://serpapi.com/search.json?engine=google_jobs&q=${encodeURIComponent(q)}&location=Paris,+France&hl=fr&gl=fr&chips=date_posted:week&api_key=${apiKey}`;\n    const response = await this.helpers.httpRequest({ method: 'GET', url, json: true });\n    if (response.jobs_results) {\n      allJobs.push(...response.jobs_results);\n    }\n  } catch(e) {\n    // Skip failed queries\n  }\n}\n\nreturn [{ json: { jobs_results: allJobs, count: allJobs.length } }];"
+      },
+      "id": "serpapi",
+      "name": "Google Jobs via SerpAPI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize jobs from all three sources into a common format\n// Safely get data from each source — handle cases where a node failed or returned nothing\nlet adzunaItems = [];\ntry { adzunaItems = $('Adzuna Job Search').first().json.results || []; } catch(e) { /* source unavailable */ }\nlet serpItems = [];\ntry { serpItems = $('Google Jobs via SerpAPI').first().json.jobs_results || []; } catch(e) { /* source unavailable */ }\nconst jobs = [];\nconst seen = new Set();\n\n// Helper to create a dedup key\nfunction dedupKey(title, company) {\n  return `${(title || '').toLowerCase().trim()}|${(company || '').toLowerCase().trim()}`;\n}\n\n// Normalize Adzuna\nfor (const job of adzunaItems) {\n  const key = dedupKey(job.title, job.company?.display_name);\n  if (seen.has(key)) continue;\n  seen.add(key);\n  jobs.push({\n    title: job.title || '',\n    company: job.company?.display_name || '',\n    location: job.location?.display_name || '',\n    description: job.description || '',\n    url: job.redirect_url || '',\n    salary_min: job.salary_min || null,\n    salary_max: job.salary_max || null,\n    source: 'Adzuna',\n    date_posted: job.created || '',\n  });\n}\n\n// Normalize SerpAPI (Google Jobs)\nfor (const job of serpItems) {\n  const key = dedupKey(job.title, job.company_name);\n  if (seen.has(key)) continue;\n  seen.add(key);\n  \n  // Extract salary from extensions if available\n  let salaryInfo = null;\n  if (job.detected_extensions?.salary) {\n    salaryInfo = job.detected_extensions.salary;\n  }\n  \n  jobs.push({\n    title: job.title || '',\n    company: job.company_name || '',\n    location: job.location || '',\n    description: job.description || '',\n    url: job.apply_options?.[0]?.link || job.share_link || '',\n    salary_min: null,\n    salary_max: null,\n    salary_text: salaryInfo,\n    source: 'Google Jobs',\n    date_posted: job.detected_extensions?.posted_at || '',\n  });\n}\n\nreturn jobs.map(j => ({ json: j }));"
+      },
+      "id": "normalize",
+      "name": "Normalize & Deduplicate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.GOOGLE_SHEET_ID }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Job Tracker"
+        },
+        "options": {}
+      },
+      "id": "read_sheet",
+      "name": "Read Existing Jobs",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        550,
+        600
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter out already-processed jobs, then limit batch to 5 per run\nconst MAX_PER_RUN = 25;\n\n// Build dedup sets from existing sheet rows\nconst existingTitleCompany = new Set();\nconst existingUrls = new Set();\nlet sheetRowCount = 0;\n\ntry {\n  const sheetItems = $('Read Existing Jobs').all();\n  sheetRowCount = sheetItems.length;\n\n  for (const item of sheetItems) {\n    const d = item.json;\n    if (!d || Object.keys(d).length === 0) continue;\n\n    // Primary dedup key: role|company (handles both column name casings)\n    const role = String(d['Role'] || d['role'] || d['Title'] || d['title'] || '').toLowerCase().trim();\n    const company = String(d['Company'] || d['company'] || '').toLowerCase().trim();\n    if (role || company) {\n      existingTitleCompany.add(`${role}|${company}`);\n    }\n\n    // Secondary dedup key: apply URL\n    const url = String(d['Apply URL'] || d['apply_url'] || d['URL'] || d['url'] || '').trim();\n    if (url && url !== 'N/A' && url.length > 5) {\n      existingUrls.add(url);\n    }\n  }\n} catch(e) {\n  // Do NOT silently swallow — log so we can debug\n  console.log('[Filter] WARNING: Could not read existing jobs: ' + e.message);\n}\n\nconsole.log(`[Filter] Sheet: ${sheetRowCount} rows → ${existingTitleCompany.size} title|company keys, ${existingUrls.size} URLs`);\n\nconst allNormalized = $('Normalize & Deduplicate').all();\n\nconst newJobs = allNormalized.filter(item => {\n  const j = item.json;\n  const titleKey = `${(j.title || '').toLowerCase().trim()}|${(j.company || '').toLowerCase().trim()}`;\n  const url = (j.url || '').trim();\n\n  if (existingTitleCompany.has(titleKey)) return false;\n  if (url && existingUrls.has(url)) return false;\n  return true;\n});\n\nconsole.log(`[Filter] ${allNormalized.length} normalized → ${newJobs.length} new after dedup (max ${MAX_PER_RUN})`);\n\nif (newJobs.length === 0) return [];\nreturn newJobs.slice(0, MAX_PER_RUN);"
+      },
+      "id": "filter_existing",
+      "name": "Filter Already Processed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ── Groq tailoring (30 RPM, 1000 RPD, 100K TPD free tier) ───────────────────\nconst items = $input.all();\nconst apiKey = $env.GROQ_API_KEY;\nconst MODEL = 'llama-3.3-70b-versatile';\n\nasync function tailorJob(item) {\n  const job = item.json;\n  const systemPrompt = 'You are a resume tailoring assistant. You always respond with valid JSON only, no markdown.';\n  const userPrompt = `Given a job posting and a candidate resume, produce a tailored version that reorders and reweights content to match the job.\n\nJOB POSTING:\nTitle: ${job.title}\nCompany: ${job.company}\nDescription: ${(job.description || '').substring(0, 2000)}\nIdentify and incorporate relevant ATS keywords from the job description.\n\nCANDIDATE EXPERIENCE (choose and reorder the most relevant):\n\n1. Computer Vision R&D Engineer | GoPro | Paris, France | Mar. 2025 -- Sep. 2025\n   - Architected a Sim-to-Real deep learning pipeline to solve parallax artifacts in dual-lens 360 degree image stitching.\n   - Developed a procedural generation engine in Blender (Python API) to render photorealistic synthetic datasets.\n   - Engineered a custom PyTorch model; validated with ML & Algorithm teams to outperform the production baseline.\n   - Achieved >50% reduction in processing time over the legacy algorithm while minimizing seam artifacts.\n\n2. Lead Founding Engineer & CTO | BargMe Startup | Remote | Jan. 2023 -- Nov. 2024\n   - Engineered a vision-integrated product recognition pipeline, processing real-time mobile camera input to trigger algorithmic recommendations.\n   - Developed the recommendation logic that generates cost-optimized alternative shopping lists based on queries.\n   - Managed product lifecycle from research to deployment on Debian VPS, balancing backend latency with mobile constraints.\n\n3. Technical Educator & 3D Specialist | SkillDino (InspirationTuts) | Remote | Jan. 2022 -- Dec. 2023\n   - Authored tutorials on 3D Computer Vision (Photogrammetry, NeRFs) for an audience of 300,000+ subscribers.\n   - Produced content bridging 3D software (Blender, Unity) and AI (OpenCV), simplifying complex research papers.\n\nPROJECTS (choose and reorder the most relevant):\n\n1. ASYEL: Sign Language Translation | Deep Learning, LSTM, Time-Series | Apr. 2022\n   - Architected a gesture-to-speech translation pipeline using LSTM networks to classify live sign language sequences.\n   - Solved data scarcity by recording a custom dataset, handling motion capture to feature extraction.\n   - Won 2nd Prize at the National Innovation Competition.\n\n2. Autonomous Safety & Fall Detection | Python, Pose Estimation, Edge AI | Nov. 2021\n   - Developed an AI safety module for robotic vacuums to detect unattended incidents using Skeleton Tracking.\n   - Designed human-in-the-loop verification: AI waits for an OK gesture to cancel alerts, reducing false positives.\n   - Awarded 1st Prize at the Google DevFest AI Hackathon.\n\n3. Real-Time Driver Monitoring (ADAS) | Python, MediaPipe 3D, OpenCV | Sep. 2021\n   - Engineered a drowsiness/distraction detection system using 3D Facial Mesh to track 468 landmarks in real-time.\n   - Implemented geometric analysis of facial vectors to calculate Eye Aspect Ratio (EAR) and yawning frequency.\n   - Selected as Judges Favorite capstone project at Samsung Innovation Campus.\n\nSKILLS (reorder categories and items by relevance to this job):\n- Computer Vision & 3D: OpenCV, MediaPipe, YOLO, Optical Flow, Stereo Vision, Multi-view Geometry, Depth Est.\n- Deep Learning: PyTorch/TensorFlow, CNNs (U-Net, ResNet), Vision Transformers, GANs, LSTMs, Custom Loss Design, Model Optimization\n- 3D Graphics & Sim: Blender (Procedural Generation, Python API, Physics), Unity, Unreal Engine, Ray Tracing\n- Software Engineering: Python (Expert), C++, C, TypeScript/JavaScript, SQL, Git, Docker, Linux, AWS, ONNX\n- Data Science: NumPy, Pandas, Scikit-learn, Matplotlib, Seaborn, Jupyter\n\nRULES:\n- NEVER fabricate experience — only reframe and reorder existing achievements\n- Reorder experiences and projects by relevance to THIS job (most relevant first)\n- You may omit less relevant experiences/projects if space is tight (keep at least 2 experiences and 2 projects)\n- Reword bullet points to emphasize aspects relevant to the job\n- Reorder skills categories and items within them by relevance\n- Incorporate ATS keywords naturally into bullet points\n\nRespond ONLY with valid JSON:\n{\"company\": \"<company>\", \"role\": \"<title>\", \"ats_keywords\": [\"...\"], \"experiences\": [{\"title\": \"...\", \"dates\": \"...\", \"company\": \"...\", \"location\": \"...\", \"bullets\": [\"...\"]}], \"projects\": [{\"name\": \"...\", \"tech\": \"...\", \"dates\": \"...\", \"bullets\": [\"...\"]}], \"skills\": [{\"category\": \"...\", \"items\": \"...\"}]}`;\n\n  const body = {\n    model: MODEL,\n    messages: [\n      { role: 'system', content: systemPrompt },\n      { role: 'user', content: userPrompt }\n    ],\n    temperature: 0.3,\n    response_format: { type: 'json_object' }\n  };\n\n  const retryDelays = [5000, 15000, 30000];\n  for (let attempt = 0; attempt <= 3; attempt++) {\n    try {\n      const response = await this.helpers.httpRequest({\n        method: 'POST',\n        url: 'https://api.groq.com/openai/v1/chat/completions',\n        body, json: true,\n        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }\n      });\n      const text = response.choices?.[0]?.message?.content;\n      if (!text) throw new Error('No response from Groq for tailoring');\n      const tailored = JSON.parse(text);\n      return { json: { ...job, tailored_resume: tailored } };\n    } catch(e) {\n      const is429 = e.message?.includes('429');\n      if (is429 && attempt < 3) { await new Promise(r => setTimeout(r, retryDelays[attempt])); continue; }\n      throw e;\n    }\n  }\n}\n\nconst results = [];\nfor (let i = 0; i < items.length; i++) {\n  const result = await tailorJob.call(this, items[i]);\n  results.push(result);\n}\nreturn results;"
+      },
+      "id": "tailor_groq",
+      "name": "Tailor Resume with Groq",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Call the PDF microservice to generate the tailored resume PDF\nconst job = $input.item.json;\nconst tailored = job.tailored_resume;\n\nif (!tailored) throw new Error('No tailored_resume data found');\n\nconst response = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'http://pdf-service:3456/',\n  body: JSON.stringify(tailored),\n  headers: { 'Content-Type': 'application/json' },\n  encoding: 'arraybuffer',\n  returnFullResponse: true\n});\n\nconst headers = response.headers || {};\nconst filename = headers['x-filename'] || `Riad_Boussoura_CV_${(job.company || 'Company').replace(/[^\\w-]/g, '_')}.pdf`;\nconst pdfBuffer = Buffer.isBuffer(response.body) ? response.body : Buffer.from(response.body);\n\nreturn {\n  json: {\n    ...job,\n    pdf_filename: filename\n  },\n  binary: {\n    data: await this.helpers.prepareBinaryData(pdfBuffer, filename, 'application/pdf')\n  }\n};"
+      },
+      "id": "generate_pdf",
+      "name": "Generate PDF",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "name": "={{ $json.pdf_filename }}",
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.GDRIVE_FOLDER_ID }}"
+        },
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "id": "upload_drive",
+      "name": "Upload to Google Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1550,
+        200
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "GOOGLE_CREDENTIAL_ID",
+          "name": "Google Drive"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Prepare row data for Google Sheet logging\nconst drive = $input.item.json;\nconst driveId = drive.id || drive.fileId || '';\n\n// Get job data -- try paired-item linking first, fallback to index\nlet job = {};\ntry {\n  job = $('Generate PDF').item.json;\n} catch(e) {\n  try {\n    const allPdfItems = $('Generate PDF').all();\n    job = allPdfItems[$itemIndex]?.json || allPdfItems[0]?.json || {};\n  } catch(e2) {\n    console.log('[PrepareRow] WARNING: Could not retrieve job data: ' + e2.message);\n  }\n}\n\n// ATS keywords come from the tailoring LLM output (not scoring)\nconst tailored = job.tailored_resume || {};\nconst atsKw = Array.isArray(tailored.ats_keywords) ? tailored.ats_keywords.join(', ') : '';\n\nreturn {\n  json: {\n    'Date': new Date().toISOString().split('T')[0],\n    'Company': job.company || '',\n    'Role': job.title || '',\n    'Location': job.location || '',\n    'Source': job.source || '',\n    'Apply URL': job.url || '',\n    'Score': '',\n    'Verdict': 'Pending Review',\n    'Rationale': '',\n    'Key Requirements': '',\n    'Gaps': '',\n    'Status': 'New',\n    'Resume PDF': driveId ? `https://drive.google.com/file/d/${driveId}/view` : '',\n    'Highlighted Skills': '',\n    'ATS Keywords': atsKw,\n    'Salary Range': job.salary_min ? `${job.salary_min} - ${job.salary_max}` : (job.salary_text || 'N/A'),\n    'Hiring Manager': '',\n    'Notes': ''\n  }\n};"
+      },
+      "id": "prepare_row",
+      "name": "Prepare Sheet Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.GOOGLE_SHEET_ID }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Job Tracker"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": []
+        },
+        "options": {}
+      },
+      "id": "write_sheet",
+      "name": "Log to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2050,
+        200
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Run Every 6 Hours": {
+      "main": [
+        [
+          {
+            "node": "Adzuna Job Search",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Google Jobs via SerpAPI",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Existing Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adzuna Job Search": {
+      "main": [
+        [
+          {
+            "node": "Normalize & Deduplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Jobs via SerpAPI": {
+      "main": [
+        [
+          {
+            "node": "Normalize & Deduplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize & Deduplicate": {
+      "main": [
+        [
+          {
+            "node": "Filter Already Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Existing Jobs": {
+      "main": [
+        [
+          {
+            "node": "Filter Already Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Already Processed": {
+      "main": [
+        [
+          {
+            "node": "Tailor Resume with Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tailor Resume with Groq": {
+      "main": [
+        [
+          {
+            "node": "Generate PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate PDF": {
+      "main": [
+        [
+          {
+            "node": "Upload to Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Google Drive": {
+      "main": [
+        [
+          {
+            "node": "Prepare Sheet Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Sheet Row": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "job-automation"
+    },
+    {
+      "name": "production"
+    }
+  ],
+  "triggerCount": 1
+}

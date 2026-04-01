@@ -1,0 +1,11 @@
+.env
+pipeline/output/
+*.aux
+*.log
+*.out
+*.pdf
+*.synctex.gz
+*.key
+*.key.pub
+sheets/create_tracker.py
+client_secret*.json
