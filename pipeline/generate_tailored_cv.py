@@ -100,6 +100,8 @@ LATEX_SPECIAL = {
     "_": r"\_",
     "~": r"\textasciitilde{}",
     "^": r"\textasciicircum{}",
+    ">": r"\textgreater{}",
+    "<": r"\textless{}",
 }
 
 # LaTeX commands we preserve if the LLM accidentally outputs them
@@ -213,7 +215,7 @@ def normalize_date_dashes(dates: str) -> str:
 
 def build_experiences(experiences: list[dict], keywords: list[str]) -> str:
     """Build the LaTeX for the Experience section."""
-    lines = []
+    lines = ["  \\resumeSubHeadingListStart"]
     for exp in experiences:
         title = escape_latex(exp["title"])
         dates = normalize_date_dashes(escape_latex(exp["dates"]))
@@ -230,12 +232,13 @@ def build_experiences(experiences: list[dict], keywords: list[str]) -> str:
             lines.append(f"        \\resumeItem{{{bullet_bolded}}}")
         lines.append(f"      \\resumeItemListEnd")
         lines.append("")
+    lines.append("  \\resumeSubHeadingListEnd")
     return "\n".join(lines)
 
 
 def build_projects(projects: list[dict], keywords: list[str]) -> str:
     """Build the LaTeX for the Projects section."""
-    lines = []
+    lines = ["    \\resumeSubHeadingListStart"]
     for proj in projects:
         name = escape_latex(proj["name"])
         tech = escape_latex(proj["tech"])
@@ -251,6 +254,7 @@ def build_projects(projects: list[dict], keywords: list[str]) -> str:
             bullet_bolded = bold_keywords(bullet_escaped, keywords)
             lines.append(f"            \\resumeItem{{{bullet_bolded}}}")
         lines.append(f"          \\resumeItemListEnd")
+    lines.append("    \\resumeSubHeadingListEnd")
     return "\n".join(lines)
 
 
