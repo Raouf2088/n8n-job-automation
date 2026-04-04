@@ -29,24 +29,15 @@ services:
       - GOOGLE_SHEET_ID=${GOOGLE_SHEET_ID}
       - GDRIVE_FOLDER_ID=${GDRIVE_FOLDER_ID}
       - NOTIFICATION_EMAIL=${NOTIFICATION_EMAIL}
-      # CV generator paths
-      - CV_TEMPLATE_PATH=/home/node/pipeline/cv_template.tex
-      - CV_OUTPUT_DIR=/home/node/pipeline/output
+      # Pre-made resume Drive links
+      - CV_LINK_COMPUTER_VISION=${CV_LINK_COMPUTER_VISION}
+      - CV_LINK_ML_ENGINEER=${CV_LINK_ML_ENGINEER}
+      - CV_LINK_DATA_SCIENTIST=${CV_LINK_DATA_SCIENTIST}
+      - CV_LINK_DATA_ANALYST=${CV_LINK_DATA_ANALYST}
+      - CV_LINK_SOFTWARE_ENGINEER=${CV_LINK_SOFTWARE_ENGINEER}
     volumes:
       - n8n_data:/home/node/.n8n
       - ./pipeline:/home/node/pipeline
-    networks:
-      - web
-
-  pdf-service:
-    build: ./pipeline
-    container_name: pdf-service
-    restart: unless-stopped
-    environment:
-      - CV_TEMPLATE_PATH=/app/cv_template.tex
-      - PDF_SERVICE_PORT=3456
-    volumes:
-      - ./pipeline:/app
     networks:
       - web
 
