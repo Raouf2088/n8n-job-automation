@@ -37,6 +37,95 @@ Notes:
 | Adzuna | Daily at 08:00, FR + rotating country | FR daily + GB/DE/NL/AT/US/CA/AU rotating |
 | SerpAPI | Daily at 20:00, rotating location | France, Switzerland, UK, Germany rotating |
 
+## API Calling Strategy
+
+APIs are rate-limited by **number of HTTP calls**, not by volume of results returned. Each country + query combination is one call. The strategy below maximises geographic coverage while staying within each free tier.
+
+### Free Tier Limits
+
+| API | Free Limit | Resets |
+|---|---|---|
+| France Travail | Effectively unlimited | — |
+| Remotive | Unlimited (public RSS) | — |
+| Arbeitnow | Unlimited (public RSS) | — |
+| JSearch (RapidAPI) | 500 calls/month | Monthly |
+| Adzuna | 250 calls/month | Monthly |
+| SerpAPI | 100 calls/month | Monthly |
+
+### France Travail
+
+- Runs every hour, 8 keyword queries (all targeting France).
+- No call cap concerns — used freely.
+- Queries: `computer vision`, `machine learning`, `deep learning`, `NLP`, `vision par ordinateur`, `data scientist`, `intelligence artificielle`, `python`.
+
+### Remotive & Arbeitnow
+
+- Runs every hour, single paginated request each.
+- Public RSS/JSON feeds with no authentication or hard cap.
+
+### JSearch (RapidAPI) — every 3 hours, rotating regions
+
+Runs when `hour % 3 === 0` (00:00, 03:00, 06:00, …). Each run picks one region set from an 8-position rotation based on `day % 8`.
+
+| Slot | Regions queried |
+|---|---|
+| 0 | France, Switzerland |
+| 1 | United Kingdom, Germany |
+| 2 | Netherlands, France |
+| 3 | Switzerland, Belgium |
+| 4 | France, United Kingdom |
+| 5 | Germany, Netherlands |
+| 6 | Switzerland, United Kingdom |
+| 7 | France, Germany |
+
+2 queries × 8 runs/day = **16 calls/day → ~480 calls/month** (within 500 limit).
+
+### Adzuna — daily at 08:00, FR daily + rotating international country
+
+Each query (keyword × country) is one API call.
+
+**Daily France queries (every day):** `computer vision`, `machine learning`, `deep learning` → 3 calls/day
+
+**Rotating international country (1 country per day of week):**
+
+| Day | Country |
+|---|---|
+| Sunday | GB (United Kingdom) |
+| Monday | DE (Germany) |
+| Tuesday | NL (Netherlands) |
+| Wednesday | AT (Austria) |
+| Thursday | US (United States) |
+| Friday | CA (Canada) |
+| Saturday | AU (Australia) |
+
+2 international queries on the rotating country (`computer vision`, `machine learning`) → 2 calls/day
+
+Total: **5 calls/day → ~150 calls/month** (within 250 limit, ~40% buffer).
+
+### SerpAPI — daily at 20:00, 3-day location cycle
+
+Runs a clean 3-day cycle using `day % 3`:
+
+| `day % 3` | Location searched |
+|---|---|
+| 0 | France |
+| 1 | Switzerland |
+| 2 | United Kingdom |
+
+3 keyword queries per run → **3 calls/day → ~90 calls/month** (within 100 limit, ~10% buffer).
+
+> **Note:** SerpAPI has the tightest budget. The 10% buffer means roughly 3 spare calls per month. Avoid adding more queries here without reducing elsewhere or upgrading the plan.
+
+### Monthly Budget Summary
+
+| API | Budget | Projected Usage | Headroom |
+|---|---|---|---|
+| JSearch | 500 | ~480 | ~4% |
+| Adzuna | 250 | ~150 | ~40% |
+| SerpAPI | 100 | ~90 | ~10% |
+
+---
+
 ## Scoring Model
 
 ### Score Factors
