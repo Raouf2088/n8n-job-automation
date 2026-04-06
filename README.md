@@ -134,6 +134,7 @@ Runs a clean 3-day cycle using `day % 3`:
 |---|---|
 | Role base | CV: 8, ML: 6, DS: 4, DA: 3, SWE: 2 |
 | Contract | CDI: +2, CDD/Freelance: +0, Stage: -1 |
+| Seniority | Junior: +1, Unspecified: +0, Senior: -2 |
 | Paris / IDF | +3 |
 | Other France | +2 |
 | Switzerland / UK / Europe | +1 |
@@ -141,13 +142,21 @@ Runs a clean 3-day cycle using `day % 3`:
 
 Paris / IDF tier includes suburbs such as La Defense, Nanterre, Boulogne, Levallois, Puteaux, and Issy.
 
+**Seniority detection:**
+- Junior signals (title + description): `junior`, `jr.`, `débutant`, `entry-level`, `fresh graduate`, `jeune diplômé`, `recent graduate`, `berufseinsteiger`
+- Senior signals (title): `senior`, `sr.`, `principal`, `staff`, `lead`, `expert`, `director`, `head of`, `architect`
+- Senior signals (description): `profil confirmé`, `confirmé(e) en/dans`, `expérimenté(e)`
+- No seniority keyword found → Unspecified (+0)
+
 ### Worked Examples
 
-- Computer Vision + CDI + Paris = 8 + 2 + 3 = 13
-- ML Engineer + CDI + Lyon = 6 + 2 + 2 = 10
-- ML Engineer + CDI + Zurich = 6 + 2 + 1 = 9
-- Data Scientist + CDI + US = 4 + 2 + 0 = 6
-- Software Engineer + Stage + Paris = 2 - 1 + 3 = 4
+- Computer Vision + CDI + Junior + Paris = 8 + 2 + 1 + 3 = **14**
+- Computer Vision + CDI + Unspecified + Paris = 8 + 2 + 0 + 3 = **13**
+- Computer Vision + CDI + Senior + Paris = 8 + 2 - 2 + 3 = **11**
+- ML Engineer + CDI + Junior + Lyon = 6 + 2 + 1 + 2 = **11**
+- ML Engineer + CDI + Unspecified + Zurich = 6 + 2 + 0 + 1 = **9**
+- Data Scientist + CDI + Senior + US = 4 + 2 - 2 + 0 = **4**
+- Software Engineer + Stage + Paris = 2 - 1 + 0 + 3 = **4**
 
 ## Project Structure
 
