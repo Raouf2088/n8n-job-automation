@@ -171,7 +171,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Daily digest — only send at 8am Paris time\nconst hour = new Date().getHours();\nif (hour !== 8) return [];\n\nconst items = $('Prepare Sheet Row').all();\nif (items.length === 0) return [];\n\nconst date = new Date().toLocaleDateString('fr-FR');\n\n// Sort by score descending\nconst sorted = [...items].sort((a, b) => (b.json['Score'] || 0) - (a.json['Score'] || 0));\n\nfunction formatPostedDate(raw) {\n  if (!raw) return '-';\n  if (isNaN(Date.parse(raw))) return raw;\n  const d = new Date(raw);\n  return d.toLocaleDateString('fr-FR');\n}\n\nfunction scoreColor(s) {\n  if (s >= 8) return '#2d5016';\n  if (s >= 5) return '#b8860b';\n  return '#888';\n}\n\nconst rows = sorted.map(item => {\n  const d = item.json;\n  const s = d['Score'] || 0;\n  return `<tr><td style=\"padding:6px 10px;border-bottom:1px solid #eee\"><strong style=\"color:${scoreColor(s)}\">${s}/10</strong></td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Role Category']}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Company']}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Role']}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Location']}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Contract Type'] || '-'}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\"><a href=\"${d['Apply URL']}\">Apply</a></td></tr>`;\n}).join('');\n\nreturn [{\n  json: {\n    emailSubject: `Job Pipeline: ${items.length} new jobs (${date})`,\n    emailBody: `<div style=\"font-family:Arial,sans-serif;max-width:900px\"><h2 style=\"color:#333\">Job Pipeline Run Summary</h2><p><strong>${items.length}</strong> new jobs found, sorted by relevance score.</p><table style=\"border-collapse:collapse;width:100%;font-size:14px\"><tr style=\"background:#2d5016;color:white\"><th style=\"padding:8px 10px;text-align:left\">Score</th><th style=\"padding:8px 10px;text-align:left\">Category</th><th style=\"padding:8px 10px;text-align:left\">Company</th><th style=\"padding:8px 10px;text-align:left\">Role</th><th style=\"padding:8px 10px;text-align:left\">Location</th><th style=\"padding:8px 10px;text-align:left\">Contract</th><th style=\"padding:8px 10px;text-align:left\">Apply</th></tr>${rows}</table><br><p style=\"color:#888;font-size:12px\">Sent by your Job Search Automation Pipeline</p></div>`\n  }\n}];"
+        "jsCode": "// Daily digest — only send at 8am Paris time\nconst hour = new Date().getHours();\nif (hour !== 8) return [];\n\nconst items = $('Prepare Sheet Row').all();\nif (items.length === 0) return [];\n\nconst date = new Date().toLocaleDateString('fr-FR');\n\n// Sort by score descending\nconst sorted = [...items].sort((a, b) => (b.json['Score'] || 0) - (a.json['Score'] || 0));\n\nfunction scoreColor(s) {\n  if (s >= 11) return '#2d5016';\n  if (s >= 7) return '#b8860b';\n  return '#888';\n}\n\nconst rows = sorted.map(item => {\n  const d = item.json;\n  const s = d['Score'] || 0;\n  return `<tr><td style=\"padding:6px 10px;border-bottom:1px solid #eee\"><strong style=\"color:${scoreColor(s)}\">${s}/15</strong></td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Role Category']}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Company']}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Role']}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Location']}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Contract Type'] || '-'}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\"><a href=\"${d['Apply URL']}\">Apply</a></td></tr>`;\n}).join('');\n\nreturn [{\n  json: {\n    emailSubject: `Job Pipeline: ${items.length} new jobs (${date})`,\n    emailBody: `<div style=\"font-family:Arial,sans-serif;max-width:900px\"><h2 style=\"color:#333\">Job Pipeline Run Summary</h2><p><strong>${items.length}</strong> new jobs found, sorted by relevance score.</p><table style=\"border-collapse:collapse;width:100%;font-size:14px\"><tr style=\"background:#2d5016;color:white\"><th style=\"padding:8px 10px;text-align:left\">Score</th><th style=\"padding:8px 10px;text-align:left\">Category</th><th style=\"padding:8px 10px;text-align:left\">Company</th><th style=\"padding:8px 10px;text-align:left\">Role</th><th style=\"padding:8px 10px;text-align:left\">Location</th><th style=\"padding:8px 10px;text-align:left\">Contract</th><th style=\"padding:8px 10px;text-align:left\">Apply</th></tr>${rows}</table><br><p style=\"color:#888;font-size:12px\">Sent by your Job Search Automation Pipeline</p></div>`\n  }\n}];"
       },
       "id": "summary_email_code",
       "name": "Build Summary Email",
@@ -199,6 +199,45 @@
       "position": [
         2800,
         500
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "GOOGLE_CREDENTIAL_ID",
+          "name": "Gmail"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Immediate alert for high-priority jobs (score > 11)\nconst items = $('Categorize & Score').all();\nconst highPriority = items.filter(i => (i.json.relevance_score || 0) > 11);\n\nif (highPriority.length === 0) return [];\n\nconst date = new Date().toLocaleDateString('fr-FR');\nconst time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });\n\nconst rows = highPriority\n  .sort((a, b) => (b.json.relevance_score || 0) - (a.json.relevance_score || 0))\n  .map(item => {\n    const j = item.json;\n    const s = j.relevance_score || 0;\n    return `<tr><td style=\"padding:8px 12px;border-bottom:1px solid #eee\"><strong style=\"color:#2d5016\">${s}/15</strong></td><td style=\"padding:8px 12px;border-bottom:1px solid #eee\">${j.role_category || '-'}</td><td style=\"padding:8px 12px;border-bottom:1px solid #eee\">${j.company || '-'}</td><td style=\"padding:8px 12px;border-bottom:1px solid #eee\">${j.title || '-'}</td><td style=\"padding:8px 12px;border-bottom:1px solid #eee\">${j.location || '-'}</td><td style=\"padding:8px 12px;border-bottom:1px solid #eee\">${j.contract_type || '-'}</td><td style=\"padding:8px 12px;border-bottom:1px solid #eee\"><a href=\"${j.url}\" style=\"color:#2d5016;font-weight:bold\">Apply Now</a></td></tr>`;\n  }).join('');\n\nreturn [{\n  json: {\n    emailSubject: `🔥 ${highPriority.length} High-Priority Job${highPriority.length > 1 ? 's' : ''} Found! (${date} ${time})`,\n    emailBody: `<div style=\"font-family:Arial,sans-serif;max-width:900px\"><h2 style=\"color:#2d5016\">🔥 High-Priority Match${highPriority.length > 1 ? 'es' : ''}</h2><p>${highPriority.length} job${highPriority.length > 1 ? 's' : ''} scored <strong>above 11/15</strong> — these are strong matches for your profile.</p><table style=\"border-collapse:collapse;width:100%;font-size:14px\"><tr style=\"background:#2d5016;color:white\"><th style=\"padding:8px 12px;text-align:left\">Score</th><th style=\"padding:8px 12px;text-align:left\">Category</th><th style=\"padding:8px 12px;text-align:left\">Company</th><th style=\"padding:8px 12px;text-align:left\">Role</th><th style=\"padding:8px 12px;text-align:left\">Location</th><th style=\"padding:8px 12px;text-align:left\">Contract</th><th style=\"padding:8px 12px;text-align:left\">Apply</th></tr>${rows}</table><br><p style=\"color:#888;font-size:12px\">Sent immediately by your Job Search Automation Pipeline</p></div>`\n  }\n}];"
+      },
+      "id": "high_priority_alert",
+      "name": "Build High Priority Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.NOTIFICATION_EMAIL }}",
+        "subject": "={{ $json.emailSubject }}",
+        "emailType": "html",
+        "message": "={{ $json.emailBody }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "send_high_priority",
+      "name": "Send High Priority Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1800,
+        300
       ],
       "credentials": {
         "gmailOAuth2": {
@@ -460,6 +499,22 @@
         [
           {
             "node": "Prepare Sheet Row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build High Priority Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build High Priority Alert": {
+      "main": [
+        [
+          {
+            "node": "Send High Priority Email",
             "type": "main",
             "index": 0
           }
