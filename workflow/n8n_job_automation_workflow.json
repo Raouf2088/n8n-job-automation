@@ -170,16 +170,46 @@
     },
     {
       "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.GOOGLE_SHEET_ID }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Job Tracker"
+        },
+        "options": {}
+      },
+      "id": "read_today_jobs",
+      "name": "Read Today Jobs",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        250,
+        1250
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Daily digest — only send at 8am Paris time\nconst hour = new Date().getHours();\nif (hour !== 8) return [];\n\nconst items = $('Prepare Sheet Row').all();\nif (items.length === 0) return [];\n\nconst date = new Date().toLocaleDateString('fr-FR');\n\n// Sort by score descending\nconst sorted = [...items].sort((a, b) => (b.json['Score'] || 0) - (a.json['Score'] || 0));\n\nfunction scoreColor(s) {\n  if (s >= 11) return '#2d5016';\n  if (s >= 7) return '#b8860b';\n  return '#888';\n}\n\nconst rows = sorted.map(item => {\n  const d = item.json;\n  const s = d['Score'] || 0;\n  return `<tr><td style=\"padding:6px 10px;border-bottom:1px solid #eee\"><strong style=\"color:${scoreColor(s)}\">${s}/15</strong></td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Role Category']}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Company']}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Role']}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Location']}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Contract Type'] || '-'}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\"><a href=\"${d['Apply URL']}\">Apply</a></td></tr>`;\n}).join('');\n\nreturn [{\n  json: {\n    emailSubject: `Job Pipeline: ${items.length} new jobs (${date})`,\n    emailBody: `<div style=\"font-family:Arial,sans-serif;max-width:900px\"><h2 style=\"color:#333\">Job Pipeline Run Summary</h2><p><strong>${items.length}</strong> new jobs found, sorted by relevance score.</p><table style=\"border-collapse:collapse;width:100%;font-size:14px\"><tr style=\"background:#2d5016;color:white\"><th style=\"padding:8px 10px;text-align:left\">Score</th><th style=\"padding:8px 10px;text-align:left\">Category</th><th style=\"padding:8px 10px;text-align:left\">Company</th><th style=\"padding:8px 10px;text-align:left\">Role</th><th style=\"padding:8px 10px;text-align:left\">Location</th><th style=\"padding:8px 10px;text-align:left\">Contract</th><th style=\"padding:8px 10px;text-align:left\">Apply</th></tr>${rows}</table><br><p style=\"color:#888;font-size:12px\">Sent by your Job Search Automation Pipeline</p></div>`\n  }\n}];"
+        "jsCode": "// Daily digest — only send at midnight Paris time, summarizing the whole day\nconst hour = new Date().getHours();\nif (hour !== 0) return [];\n\n// Today's date in yyyy-mm-dd format (the jobs logged today)\nconst now = new Date();\nconst todayPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;\n\n// Filter sheet rows to only today's entries\nconst allRows = $input.all();\nconst items = allRows.filter(item => {\n  const date = (item.json['Date'] || '').toString();\n  return date.startsWith(todayPrefix);\n});\n\nif (items.length === 0) return [];\n\nconst date = now.toLocaleDateString('fr-FR');\n\n// Sort by score descending\nconst sorted = [...items].sort((a, b) => (Number(b.json['Score']) || 0) - (Number(a.json['Score']) || 0));\n\nfunction scoreColor(s) {\n  if (s >= 11) return '#2d5016';\n  if (s >= 7) return '#b8860b';\n  return '#888';\n}\n\nconst rows = sorted.map(item => {\n  const d = item.json;\n  const s = Number(d['Score']) || 0;\n  return `<tr><td style=\"padding:6px 10px;border-bottom:1px solid #eee\"><strong style=\"color:${scoreColor(s)}\">${s}/15</strong></td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Role Category'] || '-'}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Company'] || '-'}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Role'] || '-'}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Location'] || '-'}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${d['Contract Type'] || '-'}</td><td style=\"padding:6px 10px;border-bottom:1px solid #eee\"><a href=\"${d['Apply URL']}\">${d['Apply URL'] ? 'Apply' : '-'}</a></td></tr>`;\n}).join('');\n\nreturn [{\n  json: {\n    emailSubject: `Job Pipeline Daily Summary: ${items.length} jobs found (${date})`,\n    emailBody: `<div style=\"font-family:Arial,sans-serif;max-width:900px\"><h2 style=\"color:#333\">Daily Job Pipeline Summary</h2><p><strong>${items.length}</strong> jobs found across all runs today (${date}), sorted by relevance score.</p><table style=\"border-collapse:collapse;width:100%;font-size:14px\"><tr style=\"background:#2d5016;color:white\"><th style=\"padding:8px 10px;text-align:left\">Score</th><th style=\"padding:8px 10px;text-align:left\">Category</th><th style=\"padding:8px 10px;text-align:left\">Company</th><th style=\"padding:8px 10px;text-align:left\">Role</th><th style=\"padding:8px 10px;text-align:left\">Location</th><th style=\"padding:8px 10px;text-align:left\">Contract</th><th style=\"padding:8px 10px;text-align:left\">Apply</th></tr>${rows}</table><br><p style=\"color:#888;font-size:12px\">Sent by your Job Search Automation Pipeline</p></div>`\n  }\n}];"
       },
       "id": "summary_email_code",
       "name": "Build Summary Email",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2550,
-        500
+        500,
+        1250
       ]
     },
     {
@@ -197,8 +227,8 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        2800,
-        500
+        750,
+        1250
       ],
       "credentials": {
         "gmailOAuth2": {
@@ -369,6 +399,11 @@
             "node": "Read Existing Jobs",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Read Today Jobs",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -532,7 +567,7 @@
         ]
       ]
     },
-    "Log to Google Sheet": {
+    "Read Today Jobs": {
       "main": [
         [
           {
