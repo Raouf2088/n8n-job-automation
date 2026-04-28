@@ -187,17 +187,21 @@ n8n-job-automation/
 - Tracking sheet:
   - centralized job history and status workflow
 
-## Local Run (Windows + Docker Desktop)
-
-1. Ensure Docker Desktop is installed and running.
-2. Configure required environment variables in `.env`.
-3. Start services:
+## Quickstart
 
 ```bash
+git clone <your-fork-url> n8n-job-automation
+cd n8n-job-automation
+cp .env.example .env   # then fill in keys
 docker compose up -d
+open http://localhost:5678
 ```
 
-4. Open n8n at `http://localhost:5678`.
+For the full step-by-step walkthrough (Google OAuth, API keys, importing the workflow):
+**[INSTALL.md](INSTALL.md)**
+
+To customize search terms, scoring, role categories, and the resume for your own profile:
+**[ADAPT.md](ADAPT.md)**
 
 ## Data Flow
 

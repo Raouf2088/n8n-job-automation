@@ -3,7 +3,8 @@
     "allow": [
       "Bash(pip install:*)",
       "Bash(python3 sheets/create_tracker.py)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(git -C d:/Code/n8n-job-automation log --all --oneline -- 'client_secret*' 'ssh-key*')"
     ]
   }
 }
