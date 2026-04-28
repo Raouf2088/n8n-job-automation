@@ -98,8 +98,10 @@ If you rename or replace categories in step 2a, update this map and the correspo
 
 Two files:
 
-- **`resume.tex`** — the static base CV (Jake's Resume template). Open it and replace name, header (email, LinkedIn, GitHub), Education, Experience, Projects, Skills.
-- **`pipeline/cv_template.tex`** — same template with `{{EXPERIENCES}}`, `{{PROJECTS}}`, `{{SKILLS}}` placeholders. Replace the static **header** and **Education** sections with yours; leave the placeholders alone.
+- **`resume.tex`** — the static base CV (Jake's Resume template). Open it and replace name, header (email, LinkedIn, GitHub), Education, Experience, Projects, Skills. Ships with placeholder content (`Your Name`, `Your University`, etc.) — search for `Your ` and `20XX` to find every spot to edit.
+- **`pipeline/cv_template.tex`** — same template with `{{EXPERIENCES}}`, `{{PROJECTS}}`, `{{SKILLS}}` placeholders. Replace the static **header** and **Education** sections with yours; leave the three `{{...}}` markers alone.
+
+> Both files have a comment block at the top listing what's safe to edit. The repo's `.gitignore` excludes `*.local.tex`, so you can keep an unsanitized personal copy as e.g. `resume.local.tex` without it leaking into commits.
 
 Both compile with plain `pdflatex`. Test locally:
 
