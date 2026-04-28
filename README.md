@@ -1,18 +1,33 @@
 # Job Search Automation Pipeline
 
-Automated job discovery and CV tailoring pipeline running on n8n + Python + LaTeX.
+Automated job discovery pipeline running on n8n + Python + LaTeX.
 
-The workflow ingests jobs from multiple sources, deduplicates and scores them, generates tailored resume PDFs, logs everything to Google Sheets, and sends a single daily digest email.
+The workflow ingests jobs from multiple sources, deduplicates and scores them with a deterministic regex model, attaches a pre-made resume link based on the role category, logs everything to Google Sheets, and sends a daily digest email plus high-priority alerts.
 
 ## What It Does
 
 - Runs job ingestion every hour (with source-specific schedules where applicable).
 - Processes all new jobs found on each run (no per-run cap).
 - Scores opportunities using a role/location/contract weighted model.
-- Generates tailored CV PDFs from the LaTeX template.
-- Uploads generated PDFs to Google Drive.
+- Maps each job to one of five role categories and attaches a Drive link to the matching pre-made resume.
 - Logs all processed jobs to the tracker sheet every hour.
-- Sends one digest email per day at 08:00.
+- Sends one digest email per day at Paris midnight, plus an immediate alert for any job scoring above 11/15.
+
+## What's Active vs. Disabled
+
+The repo contains scaffolding for two features that are **wired but not invoked** by the default workflow. Everything else is on by default.
+
+| Feature | Status | Notes |
+|---|---|---|
+| Multi-source ingestion + dedup | **Active** | All sources in the table below. |
+| Regex scoring (role / contract / seniority / location) | **Active** | Runs in the `Categorize & Score` node. No API calls. |
+| Pre-made resume link per category | **Active** | Reads `CV_LINK_*` env vars. Sheet's *Resume PDF* column is blank if you leave them empty. |
+| Google Sheet logging | **Active** | Appends to the `Job Tracker` tab. |
+| Daily digest email (Paris midnight) | **Active** | Builds an HTML table of yesterday's jobs. |
+| High-priority alert (score > 11) | **Active** | Sent immediately during the run that produced the match. |
+| **LLM-based relevance scoring** | **Disabled** | `GROQ_API_KEY` / `GEMINI_API_KEY` env vars exist, but no node calls them. The current pipeline uses regex-only scoring — faster, free, deterministic. To re-enable, see [ADAPT.md §7](ADAPT.md#7-optional-bring-back-llm-scoringtailoring). |
+| **On-demand tailored resume generation** | **Disabled** | `pipeline/generate_tailored_cv.py` and `pipeline/cv_template.tex` are present and the Docker image ships with `pdflatex`, but the workflow does **not** call them. The *Resume PDF* sheet column links to one of five pre-made PDFs in Drive, not a freshly tailored one. To wire on-demand tailoring, see [ADAPT.md §4](ADAPT.md#4-the-resume-itself). |
+| **Cloud deployment (Caddy + DuckDNS)** | **Optional** | `docker-compose.yml` defines a Caddy service for HTTPS. For local-only use, run `docker compose up -d n8n` to skip it. |
 
 ## Current Schedule
 
@@ -20,11 +35,12 @@ The workflow ingests jobs from multiple sources, deduplicates and scores them, g
 - JSearch: every 3 hours with rotating regions.
 - Adzuna: daily at 08:00 (France + rotating country).
 - SerpAPI: daily at 20:00 (rotating location).
-- Email notifications: daily digest at 08:00 only.
+- Daily digest email: fires hourly but only emits at Paris 00:00, summarising the day that just ended.
+- High-priority alert: sent during any run that produces a job with score > 11/15.
 
 Notes:
 - The old 6-hour cadence has been replaced by an hourly cadence.
-- Jobs are still persisted to the sheet every hour; email is consolidated into one daily summary.
+- Jobs are still persisted to the sheet every hour; the digest is consolidated into one daily summary.
 
 ## Source Strategy (International Expansion)
 
